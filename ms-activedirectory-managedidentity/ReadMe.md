@@ -47,6 +47,7 @@ To run this sample, you'll need:
 
 - [Visual Studio](https://aka.ms/vsdownload)
 - An Internet connection
+- An Azure Account to Create, deploy, and manage applications. If you do not have an Azure Account, follow the [instructions](https://azure.microsoft.com/en-us/free/) to get a free account.
 
 ### Step 1:  Clone or download this repository
 
