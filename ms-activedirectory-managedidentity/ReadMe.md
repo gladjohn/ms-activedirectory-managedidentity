@@ -127,7 +127,7 @@ Once you launch the web app in the browser, you will see two new menu commands :
 
 <img alt="menu" src="./images/menu.png" />
 
-Click on **Get Secret**: the app will show get the secret value from the key vault.
+Click on **Get Secret**: the app will show the secret value from the key vault.
 
 > The sample uses the system assigned identity of the web app and gets the secret value from the key vault. 
 > If you want to add more client side functionallity by getting the key vault name dynammically, please refer to the [Model Binding in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/mvc/models/model-binding?view=aspnetcore-7.0)
