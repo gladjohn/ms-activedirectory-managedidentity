@@ -38,8 +38,8 @@ namespace ms_activedirectory_managedidentity.Controllers
             try
             {
                 string resource = "https://vault.azure.net";
-                var kvUri = "https://msidlabs.vault.azure.net/";  //"https://<your-key-vault-name>.vault.azure.net/";
-                var secretName = "msidlab1"; 
+                var kvUri = "https://<your-key-vault-name>.vault.azure.net/";
+                var secretName = "<secret name>"; 
 
                 //Get a managed identity token using Microsoft Identity Client
                 IManagedIdentityApplication mi = CreateManagedIdentityApplication(userAssignedId);
