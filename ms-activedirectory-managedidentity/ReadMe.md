@@ -47,7 +47,7 @@ To run this sample, you'll need:
 
 - [Visual Studio](https://aka.ms/vsdownload)
 - An Internet connection
-- An Azure Account to Create, deploy, and manage applications. If you do not have an Azure Account, follow the [instructions](https://azure.microsoft.com/en-us/free/) to get a free account.
+- An Azure Account to create, deploy, and manage applications. If you do not have an Azure Account, follow the [instructions](https://azure.microsoft.com/en-us/free/) to get a free account.
 
 ### Step 1:  Clone or download this repository
 
@@ -95,6 +95,31 @@ Follow these steps to create your App Service resources and publish your project
 1. In **Publish**, select **Azure** and then **Next**.
 
 > Please refer to the ["Publish your web app"](https://learn.microsoft.com/en-us/azure/app-service/quickstart-dotnetcore?tabs=net60&pivots=development-environment-vs#publish-your-web-app) section for detailed instructions on how to publish this sample to an Azure Web App resource.
+
+## After you deploy the sample to Azure 
+
+There are few important settings you need to change for this sample to work :
+
+### Enable managed identity on the app service
+
+- After you publish the Web App to Azure, go to your resource in the [Azure Portal](https://portal.azure.com/)
+- Select the `Identity` blade of the Web App
+  
+  <img alt="identity" src="./images/identity.png" />
+    
+- Enable the System Assigned manaded identity of the resource.
+  
+  <img alt="managed identity" src="./images/sami.png" />
+
+> For detailed steps on how to turn on managed identity on an Azure Web app, please refer these [steps](https://learn.microsoft.com/en-us/azure/azure-app-configuration/howto-integrate-azure-managed-service-identity?tabs=core5x&pivots=framework-dotnet#add-a-managed-identity)
+
+### Assign Azure roles using the Azure portal
+
+Azure role-based access control (Azure RBAC) is the authorization system you use to manage access to Azure resources. To grant access, you assign roles to users, groups, service principals, or managed identities at a particular scope. This [article](https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal) describes how to assign roles using the Azure portal.
+
+You will need to authorize the managed identity resource to access the key vault. 
+
+<img alt="RBAC" src="./images/rbac.png" />
 
 ## Launch the published web app
 
@@ -172,31 +197,6 @@ var secretValue = await response.Content.ReadAsStringAsync();
 - Once you have set up the authorization header, you can make calls to Key Vault APIs. You can use the GetAsync method of the HTTP client to call the API.
 
 Now the web page will show the secret value of the key vault secret you queried for.
-
-## After you deploy the sample to Azure 
-
-There are few important settings you need to make for this sample to work :
-
-### Enable managed identity on the app service
-
-- After you publish the Web App to Azure, go to your resource in the [Azure Portal](https://portal.azure.com/)
-- Select the `Identity` blade of the Web App
-  
-  <img alt="identity" src="./images/identity.png" />
-    
-- Enable the System Assigned manaded identity of the resource.
-  
-  <img alt="managed identity" src="./images/sami.png" />
-
-> For detailed steps on how to turn on managed identity on an Azure Web app, please refer these [steps](https://learn.microsoft.com/en-us/azure/azure-app-configuration/howto-integrate-azure-managed-service-identity?tabs=core5x&pivots=framework-dotnet#add-a-managed-identity)
-
-### Assign Azure roles using the Azure portal
-
-Azure role-based access control (Azure RBAC) is the authorization system you use to manage access to Azure resources. To grant access, you assign roles to users, groups, service principals, or managed identities at a particular scope. This [article](https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal) describes how to assign roles using the Azure portal.
-
-You will need to authorize the managed identity resource to access the key vault. 
-
-<img alt="RBAC" src="./images/rbac.png" />
 
 ## Community Help and Support
 
