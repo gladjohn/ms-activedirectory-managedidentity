@@ -167,6 +167,8 @@ private static IManagedIdentityApplication CreateManagedIdentityApplication(stri
 }
 ```
 
+> The sample app also reads the `userassignedid` from the query string. You can pass the value of the `user assigned client id` or a `resource id` to the sample app's GetSecret endpoint (GetSecret?userassignedid=1)
+
 Important things to notice:
 
 - `ManagedIdentityApplicationBuilder.Create()` will invoke the System Assigned managed identity of the Azure resource.
