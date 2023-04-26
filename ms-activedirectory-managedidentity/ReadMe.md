@@ -99,27 +99,12 @@ Follow these steps to create your App Service resources and publish your project
 
 Once you launch the web app in the browser, you will see two new menu commands : `Home` and `Get Secret`.
 
+<img alt="menu" src="./images/menu.png" />
 
-Click on **Read Mail**: the app will show a dump of the last few messages from the current user's inbox, as they are received from the Microsoft Graph.
+Click on **Get Secret**: the app will show get the secret value from the key vault.
 
-Click on **View Profile**: the app will show the profile of the current user, as they are received from the Microsoft Graph.
-
-> The sample redeems the Spa Auth Code from the initial token aquisition. You will need to sign-out and sign back in to request the SPA Auth Code.
-> If you want to add more client side functionallity, please refer to the [MSAL JS Browser Sample for Hybrid SPA](https://github.com/AzureAD/microsoft-authentication-library-for-js/tree/dev/samples/msal-browser-samples/HybridSample)
-
-Click on **Send Mail**. As it is the first time you do so, you will receive a message informing you that for the app to receive the permissions to send mail as the user, the user needs to grant additional consent. The message offers a link to initiate the process.
-
-![Incremental Consent Link](./ReadmeFiles/IncrementalConsentLink.jpg)
-
-Click it, and you will be transported back to the consent experience, this time it lists just one permission, which is **Send mail as you**.
-
-![Incremental Consent prompt](./ReadmeFiles/Incrementalconsent.JPG)
-
-Once you have consented to this permission, you will be transported back to the application: but this time, you will be presented with a simple experience for authoring an email. Use it to compose and send an email to a mailbox you have access to. Send the message and verify you receive it correctly.
-
-Hit the **sign-out** link on the top right corner.
-
-Sign in again with the same user, and follow the exact same steps described so far. You will notice that the send mail experience appears right away and no longer forces you to grant extra consent, as your decision has been recorded in your previous session.
+> The sample uses the system assigned identity of the web app and gets the secret value from the key vault. 
+> If you want to add more client side functionallity by getting the key vault name dynammically, please refer to the [Model Binding in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/mvc/models/model-binding?view=aspnetcore-7.0)
 
 > Did the sample not work for you as expected? Did you encounter issues trying this sample? Then please reach out to us using the [GitHub Issues](../issues) page.
 
@@ -127,191 +112,106 @@ Sign in again with the same user, and follow the exact same steps described so f
 
 Here there's a quick guide to the most interesting authentication-related bits of the sample.
 
-### Sign in
+### Acquiring the managed identity token
 
-As it is standard practice for ASP.NET MVC apps, the sign-in functionality is implemented with Microsoft.Identity.Web coordinating the ASP.NET OpenID Connect OWIN middleware and MSAL.NET. Here there's a relevant snippet from the authentication initialization (in the App_Start/Startup.Auth.cs file.):
+MSAL.NET supports acquiring tokens through the managed identity capability when used with applications running inside Azure infrastructure. You can read more about MSAL .NET support for managed identities [here](https://learn.microsoft.com/en-us/entra/msal/dotnet/advanced/managed-identity)
 
 ```CSharp
-public void ConfigureAuth(IAppBuilder app)
+//Get a managed identity token using Microsoft Identity Client
+IManagedIdentityApplication mi = CreateManagedIdentityApplication(userAssignedId);
+var result = await mi.AcquireTokenForManagedIdentity(resource).ExecuteAsync().ConfigureAwait(false);
+var accessToken = result.AccessToken;
+
+private static IManagedIdentityApplication CreateManagedIdentityApplication(string? userAssignedId)
 {
-    // ...
-    // Get a TokenAcquirerFactory specialized for OWIN
-    OwinTokenAcquirerFactory owinTokenAcquirerFactory = TokenAcquirerFactory.GetDefaultInstance<OwinTokenAcquirerFactory>();
-
-    // Configure the web app.
-    app.AddMicrosoftIdentityWebApp(owinTokenAcquirerFactory,
-                                    updateOptions: options => {});
-
-    // Add the services you need.
-    owinTokenAcquirerFactory.Services
-            .Configure<ConfidentialClientApplicationOptions>(options => 
-                { options.RedirectUri = "https://localhost:44326/"; })
-        .AddMicrosoftGraph()
-        .AddInMemoryTokenCaches();
-
-    owinTokenAcquirerFactory.Build();
-    // ...
+    if (userAssignedId == null)
+    {
+        return ManagedIdentityApplicationBuilder.Create()
+            .WithExperimentalFeatures()
+            .WithCacheOptions(CacheOptions.EnableSharedCacheOptions)
+            .Build();
+    }
+    else
+    {
+        return ManagedIdentityApplicationBuilder.Create(userAssignedId)
+            .WithExperimentalFeatures()
+            .WithCacheOptions(CacheOptions.EnableSharedCacheOptions)
+            .Build();
+    }
 }
 ```
 
 Important things to notice:
 
-- The Authority points to the new authentication endpoint, which supports both personal and work and school accounts.
-- the list of scopes includes both entries that are used for the sign-in function (`openid, email, profile`) and for the token acquisition function (`offline_access` is required to obtain refresh_tokens as well; `Mail.Read` is required for getting access tokens that can be used when requesting to read the user's mail).
-- In this sample, the issuer validation is turned off, which means that anybody with an account can access the application. Real life applications would likely be more restrictive, limiting access only to those Azure AD tenants or Microsoft accounts associated to customers of the application itself. In other words, real life applications would likely also have a sign-up function - and the sign-in would enforce that only the users who previously signed up have access. For simplicity, this sample does not include sign up features.
+- `ManagedIdentityApplicationBuilder.Create()` will invoke the System Assigned managed identity of the Azure resource.
+- For an Azure resource that supports user assigned managed identity you will need to pass either the `clientid` or the `resource id` using `ManagedIdentityApplicationBuilder.Create(userAssignedId)`
 
-### Initial token acquisition
+### Using the access tokens in the app
 
-This sample makes use of OpenId Connect hybrid flow, where at authentication time the app receives both sign in info, the  [id_token](https://docs.microsoft.com/azure/active-directory/develop/id-tokens)  and artifacts (in this case, an  [authorization code](https://docs.microsoft.com/azure/active-directory/develop/v2-oauth2-auth-code-flow)) that the app can use for obtaining an [access token](https://docs.microsoft.com/azure/active-directory/develop/access-tokens). This access token can be used to access other resources - in this sample, the Microsoft Graph, for the purpose of reading the user's mailbox.
-
-
-### Using access tokens in the app, handling token expiration
-
-The `ReadMail` action in the `HomeController` class demonstrates how to take advantage of Microsoft.Identity.Web for calling Microsoft Graph without having to worry about getting a token, or caching it.
+The `Get Secret` action in the `HomeController` class demonstrates how to take advantage of Microsoft.Identity.Client for calling Microsoft Key Vault without having to worry about secrets or certificates.
 
 Here is the relevant code:
 
 ```CSharp
-    try
-    {
-        GraphServiceClient graphServiceClient = this.GetGraphServiceClient();
-        await graphServiceClient.Me
-            .SendMail(message, true)
-            .Request()
-            .WithScopes("Mail.Send").PostAsync();
-        return View("MailSent");
-    }
-    catch (ServiceException graphEx) when (graphEx.InnerException is MicrosoftIdentityWebChallengeUserException)
-    {
-        ChallengeUser(graphEx.InnerException as MicrosoftIdentityWebChallengeUserException);
-        return View();
-    }
-    catch(Exception ex)
-    {
-        ViewBag.Message = ex.Message;
-        return View();
-    }
-}
+//Get the access token using MSAL 
+var accessToken = result.AccessToken;
+
+//create an HttpClient using IHttpClientFactory
+HttpClient httpClient = _httpClientFactory.CreateClient();
+
+//Use the access token to read secrets from the key vault 
+httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
+var response = await httpClient.GetAsync($"{kvUri}/secrets/{secretName}?api-version=7.2");
+var secretValue = await response.Content.ReadAsStringAsync();
 ```
 
-The idea is simple. The code gets an instance of GraphServiceClient, which already knows how to get a token.
-That done, all you need to do is to invoke `WithScopes` on the request, asking for the scopes you need. MSAL will look up the cache and return any cached token, which matches with the requirement. If such access tokens are expired or no suitable access tokens are present, but there is an associated refresh token, MSAL will automatically use that to get a new access token and return it transparently.
+- First, you need to acquire an access token 
+- Once you have the access token, create an HTTP client to call the Key Vault APIs. In C#, you can create an instance of HttpClient class.
+- Add the access token as an authorization header to the HTTP client. Set the Authorization header to Bearer followed by the access token.
+- Once you have set up the authorization header, you can make calls to Key Vault APIs. You can use the GetAsync method of the HTTP client to call the API.
 
-In the case in which refresh tokens are not present or they fail to obtain a new access token, MSAL will throw `MsalUiRequiredException`, embedded by Microsoft.Identity.Web into a `MicrosoftIdentityWebChallengeUserException`. That means that in order to obtain the requested token, the user must go through an interactive sign-in experience.
+Now the web page will show the secret value of the key vault secret you queried for.
 
-In the case of this sample, the `Mail.Read` permission is obtained as part of the login process - hence we need to trigger a new login; however we can't just redirect the user without warning, as it might be disorienting (what is happening, or why, would not be obvious to the user) and there might still be things they can do with the app that do not entail accessing mail. For that reason, the sample simply signals to the view to show a warning - and to offer a link to an action (`RefreshSession`) that the user can leverage for explicitly initiating the re-authentication process.
+## After you deploy the sample to Azure 
 
-### Using Spa Auth Code in the Front End
+There are few important settings you need to make for this sample to work :
 
-First, configure a new PublicClientApplication from MSAL.js in your single-page application:
+### Enable managed identity on the app service
 
-```JS
-const msalInstance = new msal.PublicClientApplication({
-    auth: {
-        clientId: "Enter the Client ID from the Web.Config file",
-        redirectUri: "https://localhost:44326/",
-        authority: "https://login.microsoftonline.com/organizations/"
-    }
-})
-```
+- After you publish the Web App to Azure, go to your resource in the [Azure Portal](https://portal.azure.com/)
+- Select the `Identity` blade of the Web App
+  
+  <img alt="identity" src="./images/identity.png" />
+    
+- Enable the System Assigned manaded identity of the resource.
+  
+  <img alt="managed identity" src="./images/sami.png" />
 
-Next, render the code that was acquired server-side, and provide it to the acquireTokenByCode API on the MSAL.js PublicClientApplication instance. Be sure to not include any additional scopes that were not included in the first login request, otherwise the user may be prompted for consent.
+> For detailed steps on how to turn on managed identity on an Azure Web app, please refer these [steps](https://learn.microsoft.com/en-us/azure/azure-app-configuration/howto-integrate-azure-managed-service-identity?tabs=core5x&pivots=framework-dotnet#add-a-managed-identity)
 
-```js
-    var code = spaCode;
-    const scopes = ["user.read"];
+### Assign Azure roles using the Azure portal
 
-    console.log('MSAL: acquireTokenByCode hybrid parameters present');
+Azure role-based access control (Azure RBAC) is the authorization system you use to manage access to Azure resources. To grant access, you assign roles to users, groups, service principals, or managed identities at a particular scope. This [article](https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal) describes how to assign roles using the Azure portal.
 
-    var authResult = msalInstance.acquireTokenByCode({
-        code,
-        scopes
-    })
-```
+You will need to authorize the managed identity resource to access the key vault. 
 
-Once the Access Token is retrieved using the new MSAL.js `acquireTokenByCode` api, the token is then used to read the user's profile 
+<img alt="RBAC" src="./images/rbac.png" />
 
-```js
-function callMSGraph(endpoint, token, callback) {
-    const headers = new Headers();
-    const bearer = `Bearer ${token}`;
-    headers.append("Authorization", bearer);
+## Community Help and Support
 
-    const options = {
-        method: "GET",
-        headers: headers
-    };
+Following are the most common errors you would see if any step was missed during setup:
 
-    console.log('request made to Graph API at: ' + new Date().toString());
+### An attempt was made to access a socket in a way forbidden by its access permissions. (169.254.169.254:80)
 
-    fetch(endpoint, options)
-        .then(response => response.json())
-        .then(response => callback(response, endpoint))
-        .then(result => {
-            console.log('Successfully Fetched Data from Graph API:', result);
-        })
-        .catch(error => console.log(error))
-}
-```
+This error indicates that the managed identity endpoint is not reachable. 
 
-### Handling incremental consent and OAuth2 code redemption
+> Causes : Managed identity was not turned on for the Azure Resource
 
-The `SendMail` action demonstrates how to perform operations that require incremental consent.
-Observe the structure of the GET overload of that action. The code follows the same structure as the one you saw in `ReadMail`: the difference is in how `MsalUiRequiredException` is handled.
-The application did not ask for `Mail.Send` during sign-in, hence the failure to obtain a token silently could have been caused by the fact that the user did not yet grant consent for the app to use this permission. Instead of triggering a new sign-in as we have done in `ReadMail`, here we can craft a specific authorization request for this permission. 
+### {"error":{"code":"Forbidden","message":"The user, group or application 'appid=xyz;oid=xyz;iss=https://sts.windows.net/xyz/' does not have secrets get permission on key vault '<key vault name>;location=xyz'. For help resolving this issue, please see https://go.microsoft.com/fwlink/?linkid=2125287","innererror":{"code":"AccessDenied"}}}
 
-The call to the utility function `ChallengeUser` does precisely that, leveraging ASP.NET to generate an OAuth2/OpenId Connect request for an authorization code for the Mail.Send permission.
+This error indicates that the managed identity service principal was not granted access to the key vault. 
 
-```CSharp
-private void ChallengeUser(MicrosoftIdentityWebChallengeUserException exc)
-{
-    var authenticationProperties = new AuthenticationProperties();
-    if (exc.Scopes != null)
-    {
-        authenticationProperties.Dictionary.Add("scopes", string.Join(" ", exc.Scopes));
-    }
-    if (!string.IsNullOrEmpty(exc.MsalUiRequiredException.Claims))
-    {
-        authenticationProperties.Dictionary.Add("claims", exc.MsalUiRequiredException.Claims);
-    }
-    authenticationProperties.Dictionary.Add("login_hint", (HttpContext.User as ClaimsPrincipal).GetDisplayName());
-    authenticationProperties.Dictionary.Add("domain_hint", (HttpContext.User as ClaimsPrincipal).GetDomainHint());
-
-    HttpContext.GetOwinContext().Authentication.Challenge(authenticationProperties, OpenIdConnectAuthenticationDefaults.AuthenticationType);
-}
-```
-
-Note that the custom middleware is provided only as an example, and it has numerous limitations (like a hard dependency on `MSALPerUserMemoryTokenCache`) that limit its applicability outside of this scenario.
-
-## How to deploy this sample to Azure
-
-This project has one WebApp / Web API projects. To deploy them to Azure Web Sites, you'll need, for each one, to:
-
-- create an Azure Web Site
-- publish the Web App / Web APIs to the web site, and
-- update its client(s) to call the web site instead of IIS Express.
-
-### Create and publish the `openidconnect-v2` to an Azure Web Site
-
-1. Sign in to the [Azure portal](https://portal.azure.com).
-1. Click `Create a resource` in the top left-hand corner, select **Web** --> **Web App**, and give your web site a name, for example, `openidconnect-v2-contoso.azurewebsites.net`.
-1. Thereafter select the `Subscription`, `Resource Group`, `App service plan and Location`. `OS` will be **Windows** and `Publish` will be **Code**.
-1. Click `Create` and wait for the App Service to be created.
-1. Once you get the `Deployment succeeded` notification, then click on `Go to resource` to navigate to the newly created App service.
-1. Once the web site is created, locate it it in the **Dashboard** and click it to open **App Services** **Overview** screen.
-1. From the **Overview** tab of the App Service, download the publish profile by clicking the **Get publish profile** link and save it.  Other deployment mechanisms, such as from source control, can also be used.
-1. Switch to Visual Studio and go to the openidconnect-v2 project.  Right click on the project in the Solution Explorer and select **Publish**.  Click **Import Profile** on the bottom bar, and import the publish profile that you downloaded earlier.
-1. Click on **Configure** and in the `Connection tab`, update the Destination URL so that it is a `https` in the home page url, for example [https://openidconnect-v2-contoso.azurewebsites.net](https://openidconnect-v2-contoso.azurewebsites.net). Click **Next**.
-1. On the Settings tab, make sure `Enable Organizational Authentication` is NOT selected.  Click **Save**. Click on **Publish** on the main screen.
-1. Visual Studio will publish the project and automatically open a browser to the URL of the project.  If you see the default web page of the project, the publication was successful.
-
-### Update the Active Directory tenant application registration for `openidconnect-v2`
-
-1. Navigate back to to the [Azure portal](https://portal.azure.com).
-In the left-hand navigation pane, select the **Azure Active Directory** service, and then select **App registrations (Preview)**.
-1. In the resultant screen, select the `openidconnect-v2` application.
-1. From the *Branding* menu, update the **Home page URL**, to the address of your service, for example [https://openidconnect-v2-contoso.azurewebsites.net](https://openidconnect-v2-contoso.azurewebsites.net). Save the configuration.
-1. Add the same URL in the list of values of the *Authentication -> Redirect URIs* menu. If you have multiple redirect urls, make sure that there a new entry using the App service's Uri for each redirect url.
+> Causes : Managed identity resource was not granted access to the Key Vault
 
 ## Community Help and Support
 
